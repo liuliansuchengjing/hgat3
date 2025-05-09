@@ -321,9 +321,9 @@ class MSHGAT(nn.Module):
                 cas_emb += sub_cas
 
         item_emb, h_t1 = self.gru1(dyemb)  #
-        # pos_emb, h_t2 = self.gru2(cas_emb)  #
-        # input_emb = item_emb + pos_emb  #
-        pos_emb = self.get_ht(ht)
+        pos_emb, h_t2 = self.gru2(cas_emb)  #
+        input_emb = item_emb + pos_emb  #
+        # pos_emb = self.get_ht(ht)
         input_emb = item_emb + pos_emb
         input_emb = self.LayerNorm(input_emb)  #
         input_emb = self.dropout(input_emb)  #
