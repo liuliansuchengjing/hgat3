@@ -234,8 +234,8 @@ class MSHGAT(nn.Module):
         )
 
         self.num_skills = opt.user_size
-        # self.ktmodel = DKT(self.hidden_size, self.hidden_size, self.num_skills, dropout=dropout)
-        self.ktmodel = lstmKT(self.n_node*2, self.hidden_size, self.n_node, dropout)
+        self.ktmodel = DKT(self.hidden_size, self.hidden_size, self.num_skills, dropout=dropout)
+        # self.ktmodel = lstmKT(self.n_node*2, self.hidden_size, self.n_node, dropout)
 
     def reset_parameters(self):
         stdv = 1.0 / math.sqrt(self.hidden_size)
@@ -263,9 +263,10 @@ class MSHGAT(nn.Module):
         input_timestamp = input_timestamp[:, :-1]
         hidden = self.dropout(self.gnn(graph))
         memory_emb_list = self.hgnn(hidden, hypergraph_list)
-        features = original_input*2 + ans
-        pred_res = self.ktmodel(features, original_input)
-        kt_mask = (original_input[:, 1:] >= 2).float()
+        pred_res, kt_mask, yt, yt_all, ht = self.ktmodel(hidden, original_input, ans)
+        # features = original_input*2 + ans
+        # pred_res = self.ktmodel(features, original_input)
+        # kt_mask = (original_input[:, 1:] >= 2).float()
 
         batch_size, max_len = input.size()
 
@@ -319,8 +320,9 @@ class MSHGAT(nn.Module):
                 cas_emb += sub_cas
 
         item_emb, h_t1 = self.gru1(dyemb)  #
-        pos_emb, h_t2 = self.gru2(cas_emb)  #
-        input_emb = item_emb + pos_emb  #
+        # pos_emb, h_t2 = self.gru2(cas_emb)  #
+        # input_emb = item_emb + pos_emb  #
+        input_emb = item_emb + ht
         input_emb = self.LayerNorm(input_emb)  #
         input_emb = self.dropout(input_emb)  #
         extended_attention_mask = self.get_attention_mask(input)
@@ -330,8 +332,8 @@ class MSHGAT(nn.Module):
         mask = get_previous_user_mask(input.cpu(), self.n_node)
         pre = (pred + mask).view(-1, pred.size(-1)).cuda()
 
-        return pre, pred_res, kt_mask
-        # return pre, pred_res, kt_mask, yt
+        # return pre, pred_res, kt_mask
+        return pre, pred_res, kt_mask, yt
 
 
 # class KTOnlyModel(nn.Module):
