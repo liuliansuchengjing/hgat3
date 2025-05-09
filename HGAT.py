@@ -208,6 +208,7 @@ class MSHGAT(nn.Module):
         self.embedding = nn.Embedding(self.n_node, self.initial_feature, padding_idx=0)
         self.reset_parameters()
         self.readout = MLPReadout(self.hidden_size, self.n_node, None)
+        self.get_ht = MLPReadout(self.n_node, self.hidden_size,  None)
         self.gru1 = nn.GRU(self.hidden_size, self.hidden_size, num_layers=1, batch_first=True)
         self.gru2 = nn.GRU(self.hidden_size, self.hidden_size, num_layers=1, batch_first=True)
 
@@ -322,7 +323,8 @@ class MSHGAT(nn.Module):
         item_emb, h_t1 = self.gru1(dyemb)  #
         # pos_emb, h_t2 = self.gru2(cas_emb)  #
         # input_emb = item_emb + pos_emb  #
-        input_emb = item_emb + ht
+        pos_emb = self.get_ht(ht)
+        input_emb = item_emb + pos_emb
         input_emb = self.LayerNorm(input_emb)  #
         input_emb = self.dropout(input_emb)  #
         extended_attention_mask = self.get_attention_mask(input)
