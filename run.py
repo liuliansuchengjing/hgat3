@@ -95,7 +95,7 @@ def train_epoch(model, training_data, graph, hypergraph_list, loss_func, kt_loss
                                     kt_mask)  # ============================================================================
         print("loss:", loss)
         print("loss_kt:", loss_kt)
-        loss = loss + loss_kt
+        loss = 0.5*loss + 0.5*loss_kt
 
         loss.backward()
 
