@@ -40,13 +40,14 @@ class DKT(nn.Module):
         # --- 预测下一题正确概率 ---
         yt = torch.sigmoid(self.fc(output))  # [batch, seq_len, num_skills]
         yt_all = yt
+        ht = yt[:, :-1, :]
         yt = yt[:, :-1, :]  # 对齐下一题预测 [batch, seq_len-1, num_skills]
 
         # --- 提取目标题概率 ---
         next_skill_ids = questions[:, 1:]  # 下一题的skill_id [batch, seq_len-1]
         pred = torch.gather(yt, dim=2, index=next_skill_ids.unsqueeze(-1).to('cuda')).squeeze(-1)
 
-        return pred, mask, yt, yt_all  # [batch, seq_len-1]
+        return pred, mask, yt, yt_all, ht  # [batch, seq_len-1]
 
 
 class lstmKT(nn.Module):
