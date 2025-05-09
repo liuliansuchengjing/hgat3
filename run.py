@@ -93,9 +93,9 @@ def train_epoch(model, training_data, graph, hypergraph_list, loss_func, kt_loss
         loss, n_correct = get_performance(loss_func, pred, gold)
         loss_kt, auc, acc = kt_loss(pred_res, ans,
                                     kt_mask)  # ============================================================================
-        print("loss:", loss)
-        print("loss_kt:", loss_kt)
-        loss = 0.5*loss + 0.5*loss_kt
+        # print("loss:", loss)
+        # print("loss_kt:", loss_kt)
+        loss = loss + loss_kt * 40000
 
         loss.backward()
 
@@ -178,11 +178,11 @@ def train_model(MSHGAT, data_path):
                 print(metric + ' ' + str(scores[metric]))
             print('auc_test: {:.10f}'.format(np.mean(auc_test)),
                   'acc_test: {:.10f}'.format(np.mean(acc_test)))
-            if (validation_history <= sum(scores.values())) and ((his_auc<=(np.mean(auc_test))) or (his_acc <=(np.mean(acc_test)))):
+            if validation_history <= (sum(scores.values()) + np.mean(auc_test) + np.mean(acc_test)):
                 print("Best Validation hit@100:{} at Epoch:{}".format(scores["hits@20"], epoch_i))
-                validation_history = sum(scores.values())
-                his_auc = np.mean(auc_test)
-                his_acc = np.mean(acc_test)
+                validation_history = (sum(scores.values()) + np.mean(auc_test) + np.mean(acc_test))
+                # his_auc = np.mean(auc_test)
+                # his_acc = np.mean(acc_test)
                 best_scores = scores
                 print("Save best model!!!")
                 torch.save(model.state_dict(), opt.save_path)
