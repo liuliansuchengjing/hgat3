@@ -10,6 +10,86 @@ import Constants
 from TransformerBlock import TransformerBlock
 from torch.autograd import Variable
 from DKT import DKT,lstmKT
+from dataLoader import Options
+import pickle
+import json
+import csv
+
+
+def load_difficulty_dict(data_name):
+    options = Options(data_name)
+
+    # 加载索引到原始ID的映射
+    with open(options.idx2u_dict, 'rb') as f:
+        idx2u = pickle.load(f)  # 格式应为 [index: original_id] 的列表
+
+    # 验证idx2u类型
+    if not isinstance(idx2u, list):
+        raise ValueError("idx2u应为列表格式，请检查数据生成过程")
+
+    # 加载难度数据
+    difficulty_data = {}
+
+    # 根据文件格式处理
+    if options.difficult_file.endswith('.csv'):
+        with open(options.difficult_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    resource_id = int(row['challenge_id'])  # 列名需与实际文件匹配
+                    difficulty = int(row['difficulty'])  # 直接转为整数
+                    if difficulty not in {1, 2, 3}:
+                        # logging.warning(f"非法难度值: {difficulty} (资源ID: {resource_id})")
+                        continue
+                    difficulty_data[resource_id] = difficulty
+                except (ValueError, KeyError) as e:
+                    # logging.error(f"CSV数据解析失败: {e}")
+                    continue
+
+    elif options.difficult_file.endswith('.json'):
+        with open(options.difficult_file, 'r') as f:
+            data = json.load(f)
+            for item in data:
+                try:
+                    if 'id' in item and 'diff' in item:
+                        resource_id = int(item['id'])
+                        difficulty = int(item['diff'])
+                        if difficulty not in {1, 2, 3}:
+                            # logging.warning(f"非法难度值: {difficulty} (资源ID: {resource_id})")
+                            continue
+                        difficulty_data[resource_id] = difficulty
+                except (ValueError, KeyError) as e:
+                    # logging.error(f"JSON数据解析失败: {e}")
+                    continue
+
+    # 构建最终难度字典
+    difficulty_dict = {}
+    for idx, original_id in enumerate(idx2u):
+        try:
+            original_id = int(original_id)
+        except ValueError:
+            # logging.warning(f"无效的original_id: 索引={idx}, 值={original_id}")
+            continue
+
+        # 默认难度设为2（中等）
+        difficulty_dict[idx] = difficulty_data.get(original_id, 1)
+
+    return difficulty_dict
+
+def generate_dif(data_path, problem_input):
+    r_difficult = load_difficulty_dict(data_path)
+    shape = problem_input.shape
+    # 初始化一个与 load_difficulty_dict 形状相同的全零张量
+    result_tensor = torch.zeros(shape, dtype=torch.int)
+
+    # 遍历 load_difficulty_dict 中的每个元素，并从 r_difficult 中获取对应的值
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            index = problem_input[i, j].item()  # 获取索引
+            result_tensor[i, j] = r_difficult.get(index)  # 从字典中获取值
+
+    return result_tensor
+
 
 
 class HGNN_conv(nn.Module):
@@ -231,7 +311,8 @@ class MSHGAT(nn.Module):
             attn_dropout_prob=self.attn_dropout_prob,
             hidden_act=self.hidden_act,
             layer_norm_eps=self.layer_norm_eps,
-            multiscale=False
+            multiscale=True,
+            scales=[5, 1e5]
         )
 
         self.num_skills = opt.user_size
@@ -256,15 +337,18 @@ class MSHGAT(nn.Module):
         predictions = self.readout(pred_logits)
         return predictions
 
-    def forward(self, input, input_timestamp, input_idx, ans, graph, hypergraph_list):
+    def forward(self, input, input_timestamp, input_idx, ans, graph, hypergraph_list, data_path):
 
         original_input = input
         input = input[:, :-1]
+        # timestamps = input_timestamp
 
         input_timestamp = input_timestamp[:, :-1]
         hidden = self.dropout(self.gnn(graph))
         memory_emb_list = self.hgnn(hidden, hypergraph_list)
-        pred_res, kt_mask, yt, yt_all, ht = self.ktmodel(hidden, original_input, ans)
+
+        diff = generate_dif(data_path, original_input)
+        pred_res, kt_mask, yt, yt_all, ht = self.ktmodel(hidden, original_input, ans, diff)
         # features = original_input*2 + ans
         # pred_res = self.ktmodel(features, original_input)
         # kt_mask = (original_input[:, 1:] >= 2).float()
@@ -321,15 +405,16 @@ class MSHGAT(nn.Module):
                 cas_emb += sub_cas
 
         item_emb, h_t1 = self.gru1(dyemb)  #
-        pos_emb, h_t2 = self.gru2(cas_emb)  #
-        input_emb = item_emb + pos_emb  #
-        # pos_emb = self.get_ht(ht)
+        # pos_emb, h_t2 = self.gru2(cas_emb)  #
+        # input_emb = item_emb + pos_emb  #
+        pos_emb = self.get_ht(ht)
         input_emb = item_emb + pos_emb
         input_emb = self.LayerNorm(input_emb)  #
         input_emb = self.dropout(input_emb)  #
         extended_attention_mask = self.get_attention_mask(input)
-        trm_output = self.trm_encoder(input_emb, extended_attention_mask,
-                                      output_all_encoded_layers=False)  # input_emb->dyemb
+        # trm_output = self.trm_encoder(input_emb, extended_attention_mask,
+        #                               output_all_encoded_layers=False)  # input_emb->dyemb
+        trm_output = self.trm_encoder(input_emb, input_timestamp)
         pred = self.pred(trm_output)
         mask = get_previous_user_mask(input.cpu(), self.n_node)
         pre = (pred + mask).view(-1, pred.size(-1)).cuda()
