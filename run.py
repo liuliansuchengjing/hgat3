@@ -59,7 +59,7 @@ def get_performance(crit, pred, gold):
     return loss, n_correct
 
 
-def train_epoch(model, training_data, graph, hypergraph_list, loss_func, kt_loss, optimizer):
+def train_epoch(model, training_data, graph, hypergraph_list, loss_func, kt_loss, optimizer, data_path):
     # train
 
     model.train()
@@ -87,7 +87,7 @@ def train_epoch(model, training_data, graph, hypergraph_list, loss_func, kt_loss
         optimizer.zero_grad()
         # pred= model(tgt, tgt_timestamp, tgt_idx, ans, graph, hypergraph_list)
         pred, pred_res, kt_mask, yt = model(tgt, tgt_timestamp, tgt_idx, ans, graph,
-                                        hypergraph_list)  # ==================================
+                                        hypergraph_list, data_path)  # ==================================
 
         # loss
         loss, n_correct = get_performance(loss_func, pred, gold)
@@ -153,7 +153,7 @@ def train_model(MSHGAT, data_path):
 
         start = time.time()
         train_loss, train_accu, train_auc, train_acc = train_epoch(model, train_data, relation_graph, hypergraph_list,
-                                                                   loss_func, kt_loss, optimizer)
+                                                                   loss_func, kt_loss, optimizer, data_path)
 
         print('  - (Training)   loss: {loss: 8.5f}, accuracy: {accu:3.3f} %, ' \
               'elapse: {elapse:3.3f} min'.format(
@@ -164,7 +164,7 @@ def train_model(MSHGAT, data_path):
 
         if epoch_i >= 0:
             start = time.time()
-            scores, auc_test, acc_test = test_epoch(model, valid_data, relation_graph, hypergraph_list, kt_loss)
+            scores, auc_test, acc_test = test_epoch(model, valid_data, relation_graph, hypergraph_list, kt_loss, data_path)
             print('  - ( Validation )) ')
             for metric in scores.keys():
                 print(metric + ' ' + str(scores[metric]))
@@ -173,7 +173,7 @@ def train_model(MSHGAT, data_path):
             print("Validation use time: ", (time.time() - start) / 60, "min")
 
             print('  - (Test) ')
-            scores, auc_test, acc_test  = test_epoch(model, test_data, relation_graph, hypergraph_list, kt_loss)
+            scores, auc_test, acc_test  = test_epoch(model, test_data, relation_graph, hypergraph_list, kt_loss, data_path)
             for metric in scores.keys():
                 print(metric + ' ' + str(scores[metric]))
             print('auc_test: {:.10f}'.format(np.mean(auc_test)),
@@ -193,7 +193,7 @@ def train_model(MSHGAT, data_path):
         print(metric + ' ' + str(best_scores[metric]))
 
 
-def test_epoch(model, validation_data, graph, hypergraph_list, kt_loss, k_list=[5, 10, 20]):
+def test_epoch(model, validation_data, graph, hypergraph_list, kt_loss, data_path, k_list=[5, 10, 20]):
     ''' Epoch operation in evaluation phase '''
     model.eval()
     auc_test = []
@@ -216,7 +216,7 @@ def test_epoch(model, validation_data, graph, hypergraph_list, kt_loss, k_list=[
             # forward
             # pred = model(tgt, tgt_timestamp, tgt_idx, ans, graph, hypergraph_list)
             pred, pred_res, kt_mask, yt= model(tgt, tgt_timestamp, tgt_idx, ans, graph,
-                                            hypergraph_list)  # ==================================
+                                            hypergraph_list, data_path)  # ==================================
             y_pred = pred.detach().cpu().numpy()
             loss_kt, auc, acc = kt_loss(pred_res.cpu(), ans.cpu(),
                                         kt_mask.cpu())  # ====================================================================
