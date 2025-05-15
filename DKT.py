@@ -12,10 +12,11 @@ class DKT(nn.Module):
         self.hidden_dim = hidden_dim
         self.bias = bias
         self.correct_embed = nn.Embedding(2, emb_dim)  # 答案结果嵌入（正确、错误）
-        self.rnn = nn.LSTM(emb_dim * 2, hidden_dim, bias=bias, dropout=dropout, batch_first=True)
+        self.difficult_emb = nn.Embedding(4, emb_dim)
+        self.rnn = nn.LSTM(emb_dim * 3, hidden_dim, bias=bias, dropout=dropout, batch_first=True)
         self.fc = nn.Linear(hidden_dim, num_skills, bias=bias)
 
-    def forward(self, dynamic_skill_embeds, questions, correct_seq):
+    def forward(self, dynamic_skill_embeds, questions, correct_seq, diff):
         """
                 Parameters:
                     dynamic_skill_embeds: 动态生成的题目嵌入 [num_skills, emb_dim]
@@ -32,9 +33,11 @@ class DKT(nn.Module):
 
         # 生成答题结果嵌入 [batch_size, seq_len, emb_dim]
         correct_embeds = self.correct_embed(correct_seq.long().to('cuda'))
+        diff_emb = self.difficult_emb(diff.long().to('cuda'))
 
         # 拼接题目嵌入和答题结果嵌入 [batch_size, seq_len, emb_dim*2]
         lstm_input = torch.cat([skill_embeds, correct_embeds], dim=-1)
+        lstm_input = torch.cat([lstm_input, diff_emb], dim=-1)
         output, (hn, cn) = self.rnn(lstm_input)
 
         # --- 预测下一题正确概率 ---
